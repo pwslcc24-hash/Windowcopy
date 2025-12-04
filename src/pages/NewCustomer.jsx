@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { base44 } from '@/api/base44Client';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Button } from '@/components/ui/button';
@@ -11,11 +11,13 @@ const { Customer, Job, Message } = base44.entities;
 
 export default function NewCustomer() {
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const queryClient = useQueryClient();
 
   const createCustomerMutation = useMutation({
     mutationFn: async (data) => {
       const customer = await Customer.create(data);
-      
+
       // Create a lead job for this customer
       const job = await Job.create({
         customer_id: customer.id,
@@ -35,14 +37,22 @@ export default function NewCustomer() {
       });
 
       return { customer, job };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      queryClient.invalidateQueries({ queryKey: ['jobs'] });
     }
   });
 
   const handleSave = async (data) => {
+    setError('');
     setSaving(true);
     try {
-      const { customer, job } = await createCustomerMutation.mutateAsync(data);
+      const { job } = await createCustomerMutation.mutateAsync(data);
       window.location.href = createPageUrl('JobDetail') + `?id=${job.id}`;
+    } catch (err) {
+      console.error('Failed to create customer', err);
+      setError('Could not create customer. Please check the details and try again.');
     } finally {
       setSaving(false);
     }
@@ -63,6 +73,12 @@ export default function NewCustomer() {
             <p className="text-slate-500">Create a new lead and send welcome message</p>
           </div>
         </div>
+
+        {error && (
+          <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700">
+            {error}
+          </div>
+        )}
 
         <CustomerForm
           onSave={handleSave}
